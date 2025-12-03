@@ -1,11 +1,15 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react'
 
 interface ParticleImageProps {
   src: string
   alt: string
   className?: string
+}
+
+export interface ParticleImageHandle {
+  getSnapshot: () => Promise<string | null>
 }
 
 interface Particle {
@@ -21,14 +25,31 @@ interface Particle {
   targetY: number
 }
 
-export default function ParticleImage({ src, alt, className = '' }: ParticleImageProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const imageRef = useRef<HTMLImageElement | null>(null)
-  const [isLoaded, setIsLoaded] = useState(false)
-  const particlesRef = useRef<Particle[]>([])
-  const animationFrameRef = useRef<number>()
-  const mouseRef = useRef({ x: 0, y: 0 })
+const ParticleImage = forwardRef<ParticleImageHandle, ParticleImageProps>(
+  ({ src, alt, className = '' }, ref) => {
+    const canvasRef = useRef<HTMLCanvasElement>(null)
+    const containerRef = useRef<HTMLDivElement>(null)
+    const imageRef = useRef<HTMLImageElement | null>(null)
+    const [isLoaded, setIsLoaded] = useState(false)
+    const particlesRef = useRef<Particle[]>([])
+    const animationFrameRef = useRef<number>()
+    const mouseRef = useRef({ x: 0, y: 0 })
+
+    // 暴露获取快照的方法
+    useImperativeHandle(ref, () => ({
+      getSnapshot: async () => {
+        const canvas = canvasRef.current
+        if (!canvas) return null
+        
+        try {
+          // 获取canvas的当前状态作为快照
+          return canvas.toDataURL('image/png')
+        } catch (error) {
+          console.error('Error getting snapshot:', error)
+          return null
+        }
+      },
+    }))
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -58,30 +79,68 @@ export default function ParticleImage({ src, alt, className = '' }: ParticleImag
       const offscreenCtx = offscreenCanvas.getContext('2d')
       if (!offscreenCtx) return
 
-      // 计算缩放比例，保持图片比例
-      const scale = Math.min(
+      // 计算缩放比例，铺满整个屏幕（使用 Math.max 确保完全填充）
+      const scale = Math.max(
         canvas.width / img.width,
         canvas.height / img.height
       )
       const scaledWidth = img.width * scale
       const scaledHeight = img.height * scale
+      // 居中裁剪，确保图片铺满整个屏幕
       const offsetX = (canvas.width - scaledWidth) / 2
       const offsetY = (canvas.height - scaledHeight) / 2
 
       offscreenCanvas.width = scaledWidth
       offscreenCanvas.height = scaledHeight
 
-      offscreenCtx.drawImage(img, 0, 0, scaledWidth, scaledHeight)
-      const imageData = offscreenCtx.getImageData(0, 0, scaledWidth, scaledHeight)
+      // 将图片绘制到画布大小，确保铺满整个屏幕
+      offscreenCanvas.width = canvas.width
+      offscreenCanvas.height = canvas.height
+      
+      // 计算源图片的裁剪区域（居中裁剪）
+      const sourceX = Math.max(0, -offsetX / scale)
+      const sourceY = Math.max(0, -offsetY / scale)
+      const sourceWidth = Math.min(img.width, canvas.width / scale)
+      const sourceHeight = Math.min(img.height, canvas.height / scale)
+      
+      // 绘制图片，铺满整个画布
+      offscreenCtx.drawImage(
+        img,
+        sourceX,
+        sourceY,
+        sourceWidth,
+        sourceHeight,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      )
+      
+      const imageData = offscreenCtx.getImageData(0, 0, canvas.width, canvas.height)
       const data = imageData.data
 
-      // 粒子密度控制（每N个像素取一个）- 更密集以匹配参考网站
-      const density = 3
+      // 粒子密度控制 - 保留更多图片细节
+      const baseDensity = 12 // 降低基础密度，增加粒子数量
       const particles: Particle[] = []
 
-      for (let y = 0; y < scaledHeight; y += density) {
-        for (let x = 0; x < scaledWidth; x += density) {
-          const index = (y * scaledWidth + x) * 4
+      // 使用随机采样，但保留更多细节
+      const sampleRate = 0.9 // 采样90%的像素点，保留更多图片细节
+      
+      // 遍历整个画布，使用随机采样
+      for (let y = 0; y < canvas.height; y += baseDensity) {
+        for (let x = 0; x < canvas.width; x += baseDensity) {
+          // 随机跳过一些区域，但保留大部分
+          if (Math.random() > sampleRate) continue
+          
+          // 减少随机偏移，让采样点更接近原始位置
+          const randomX = x + (Math.random() - 0.5) * baseDensity * 0.4
+          const randomY = y + (Math.random() - 0.5) * baseDensity * 0.4
+          
+          // 确保坐标在画布范围内
+          const sampleX = Math.max(0, Math.min(canvas.width - 1, Math.floor(randomX)))
+          const sampleY = Math.max(0, Math.min(canvas.height - 1, Math.floor(randomY)))
+          
+          const index = (sampleY * canvas.width + sampleX) * 4
           const r = data[index]
           const g = data[index + 1]
           const b = data[index + 2]
@@ -90,24 +149,42 @@ export default function ParticleImage({ src, alt, className = '' }: ParticleImag
           // 只处理不透明的像素
           if (a > 100) {
             const brightness = (r + g + b) / 3
-            // 根据亮度决定是否显示粒子 - 降低阈值以显示更多细节
-            if (brightness > 15) {
-              // 添加随机偏移，创建点云效果
-              const randomOffset = (Math.random() - 0.5) * 8 // 增加初始随机偏移，让粒子更分散
+            
+            // 计算颜色的饱和度（色彩强度）
+            const max = Math.max(r, g, b)
+            const min = Math.min(r, g, b)
+            const saturation = max === 0 ? 0 : (max - min) / max
+            
+            // 只保留有色彩的区域：
+            // 1. 亮度必须足够（过滤黑色/暗色区域，直接留白）
+            // 2. 饱和度必须足够（确保有颜色，不是灰色）
+            const minBrightness = 40 // 最低亮度阈值，过滤黑色区域
+            const minSaturation = 0.15 // 最低饱和度阈值，确保有颜色
+            
+            if (brightness > minBrightness && saturation > minSaturation) {
+              // 根据亮度和饱和度调整粒子大小
+              const brightnessFactor = Math.min(1, (brightness - minBrightness) / 100)
+              const saturationFactor = Math.min(1, saturation / 0.5)
+              
+              // 减少随机偏移，让粒子更接近原始位置，保留图片形状
+              const randomOffsetX = (Math.random() - 0.5) * baseDensity * 0.6
+              const randomOffsetY = (Math.random() - 0.5) * baseDensity * 0.6
+              
               const particle: Particle = {
-                x: x + offsetX + randomOffset,
-                y: y + offsetY + randomOffset,
-                originalX: x + offsetX,
-                originalY: y + offsetY,
+                x: sampleX + randomOffsetX,
+                y: sampleY + randomOffsetY,
+                originalX: sampleX,
+                originalY: sampleY,
                 color: `rgba(${r}, ${g}, ${b}, ${a / 255})`,
-                size: Math.random() * 1.5 + 0.6, // 稍微小一点的粒子，但变化范围更大
-                vx: (Math.random() - 0.5) * 1.2, // 增加初始随机速度，让粒子更活跃
+                size: (Math.random() * 2.5 + 1.8) * brightnessFactor * saturationFactor, // 根据亮度和饱和度调整大小
+                vx: (Math.random() - 0.5) * 1.2,
                 vy: (Math.random() - 0.5) * 1.2,
-                targetX: x + offsetX,
-                targetY: y + offsetY,
+                targetX: sampleX,
+                targetY: sampleY,
               }
               particles.push(particle)
             }
+            // 黑色/暗色区域不生成粒子，直接留白
           }
         }
       }
@@ -171,24 +248,25 @@ export default function ParticleImage({ src, alt, className = '' }: ParticleImag
           }
         }
 
-        // 添加轻微的回归力，让粒子有回到原位的趋势（降低回归力，让粒子更自由）
-        const returnForce = 0.01
+        // 增加回归力，让粒子更接近原始位置，保留图片形状
+        const returnForce = 0.02 // 增加回归力，让粒子更稳定
         targetX += (particle.originalX - particle.x) * returnForce
         targetY += (particle.originalY - particle.y) * returnForce
 
-        // 平滑移动到目标位置（增加响应速度）
-        particle.vx += (targetX - particle.x) * 0.08
-        particle.vy += (targetY - particle.y) * 0.08
-        particle.vx *= 0.85 // 降低阻尼，让粒子移动更流畅
-        particle.vy *= 0.85
+        // 平滑移动到目标位置（增加响应速度，让粒子更快回到原位）
+        particle.vx += (targetX - particle.x) * 0.1
+        particle.vy += (targetY - particle.y) * 0.1
+        particle.vx *= 0.88 // 增加阻尼，让粒子移动更稳定
+        particle.vy *= 0.88
 
         particle.x += particle.vx
         particle.y += particle.vy
 
-        // 增加随机移动幅度，让粒子更发散
+        // 减少随机移动幅度，让粒子更接近原始位置
         const time = Date.now() * 0.001
-        particle.x += Math.sin(time + particle.originalX * 0.01) * 0.8
-        particle.y += Math.cos(time + particle.originalY * 0.01) * 0.8
+        const randomMovement = 0.5 + Math.random() * 0.4 // 减少随机移动幅度
+        particle.x += Math.sin(time + particle.originalX * 0.01) * randomMovement
+        particle.y += Math.cos(time + particle.originalY * 0.01) * randomMovement
 
         // 绘制粒子，使用彩色调覆盖 - 参考网站风格
         const [r, g, b] = particle.color.match(/\d+/g) || ['255', '255', '255']
@@ -230,15 +308,15 @@ export default function ParticleImage({ src, alt, className = '' }: ParticleImag
         const baseAlpha = Math.max(0.5, Math.min(0.95, brightness / 150))
         const alpha = baseAlpha * edgeFade
 
-        // 绘制粒子主体 - 边缘粒子更小更透明
+        // 绘制粒子主体 - 增加粒子尺寸，边缘粒子稍小但整体更大
         ctx.beginPath()
-        const particleSize = particle.size * 0.7 * (0.7 + edgeFade * 0.3) // 边缘粒子更小
+        const particleSize = particle.size * (0.8 + edgeFade * 0.2) // 保持更大的粒子尺寸
         ctx.arc(particle.x, particle.y, particleSize, 0, Math.PI * 2)
         ctx.fillStyle = `rgba(${Math.floor(finalR)}, ${Math.floor(finalG)}, ${Math.floor(finalB)}, ${alpha})`
         ctx.fill()
 
-        // 添加彩色光晕效果 - 边缘光晕更大更模糊
-        const glowSize = particle.size * (3 + (1 - edgeFade) * 2) // 边缘光晕更大
+        // 添加彩色光晕效果 - 更大的光晕以匹配更大的粒子
+        const glowSize = particle.size * (4 + (1 - edgeFade) * 2) // 增加光晕大小
         const gradient = ctx.createRadialGradient(
           particle.x,
           particle.y,
@@ -247,8 +325,8 @@ export default function ParticleImage({ src, alt, className = '' }: ParticleImag
           particle.y,
           glowSize
         )
-        gradient.addColorStop(0, `rgba(${Math.floor(finalR)}, ${Math.floor(finalG)}, ${Math.floor(finalB)}, ${alpha * 0.5})`)
-        gradient.addColorStop(0.5, `rgba(${Math.floor(finalR)}, ${Math.floor(finalG)}, ${Math.floor(finalB)}, ${alpha * 0.2})`)
+        gradient.addColorStop(0, `rgba(${Math.floor(finalR)}, ${Math.floor(finalG)}, ${Math.floor(finalB)}, ${alpha * 0.6})`)
+        gradient.addColorStop(0.5, `rgba(${Math.floor(finalR)}, ${Math.floor(finalG)}, ${Math.floor(finalB)}, ${alpha * 0.3})`)
         gradient.addColorStop(1, `rgba(${Math.floor(finalR)}, ${Math.floor(finalG)}, ${Math.floor(finalB)}, 0)`)
         ctx.fillStyle = gradient
         ctx.fill()
@@ -277,10 +355,10 @@ export default function ParticleImage({ src, alt, className = '' }: ParticleImag
     canvas.width = rect.width
     canvas.height = rect.height
 
-    // 重新计算粒子位置
+    // 重新计算粒子位置 - 使用 Math.max 确保铺满整个屏幕
     if (imageRef.current && particlesRef.current.length > 0) {
       const img = imageRef.current
-      const scale = Math.min(
+      const scale = Math.max(
         canvas.width / img.width,
         canvas.height / img.height
       )
@@ -306,19 +384,24 @@ export default function ParticleImage({ src, alt, className = '' }: ParticleImag
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  return (
-    <div ref={containerRef} className={`relative w-full h-full ${className}`}>
-      {!isLoaded && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="text-[#d4af37] text-sm">加载中...</div>
-        </div>
-      )}
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0 w-full h-full"
-        style={{ mixBlendMode: 'screen' }}
-      />
-    </div>
-  )
-}
+    return (
+      <div ref={containerRef} className={`relative w-full h-full ${className}`}>
+        {!isLoaded && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-[#d4af37] text-sm">加载中...</div>
+          </div>
+        )}
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 w-full h-full"
+          style={{ mixBlendMode: 'screen' }}
+        />
+      </div>
+    )
+  }
+)
+
+ParticleImage.displayName = 'ParticleImage'
+
+export default ParticleImage
 

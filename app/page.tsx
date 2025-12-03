@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import ParticleBackground from '@/components/ParticleBackground'
-import ParticleImage from '@/components/ParticleImage'
+import ParticleImage, { ParticleImageHandle } from '@/components/ParticleImage'
 
 interface Dream {
   id: string
@@ -26,6 +26,7 @@ export default function Home() {
   
   const fileInputRef = useRef<HTMLInputElement>(null)
   const recognitionRef = useRef<any>(null)
+  const particleImageRef = useRef<ParticleImageHandle>(null)
 
   // 加载梦境列表
   const loadDreams = async () => {
@@ -166,14 +167,38 @@ export default function Home() {
     setIsProcessing(true)
 
     try {
-      // 1. 上传图片
-      const formData = new FormData()
-      formData.append('file', image)
-      const uploadResponse = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      })
-      const { imageUrl } = await uploadResponse.json()
+      // 1. 获取canvas快照
+      let imageUrl = ''
+      if (particleImageRef.current) {
+        const snapshot = await particleImageRef.current.getSnapshot()
+        if (snapshot) {
+          // 将base64转换为Blob
+          const response = await fetch(snapshot)
+          const blob = await response.blob()
+          
+          // 上传快照
+          const formData = new FormData()
+          formData.append('file', blob, 'dream-snapshot.png')
+          const uploadResponse = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData,
+          })
+          const result = await uploadResponse.json()
+          imageUrl = result.imageUrl
+        }
+      }
+      
+      // 如果快照获取失败，使用原始图片作为后备
+      if (!imageUrl) {
+        const formData = new FormData()
+        formData.append('file', image)
+        const uploadResponse = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        })
+        const result = await uploadResponse.json()
+        imageUrl = result.imageUrl
+      }
 
       // 2. 处理梦境文本
       const processResponse = await fetch('/api/process-dream', {
@@ -255,7 +280,7 @@ export default function Home() {
         {!showList ? (
           <>
             {/* 主页面 - 创建新梦境 */}
-            <div className="relative">
+            <div className="relative w-full h-screen">
             {/* 标题区域 - 绝对定位在顶部 */}
             {!imagePreview && (
               <div className="absolute top-24 left-0 right-0 z-20 text-center fade-in-slow">
@@ -271,25 +296,21 @@ export default function Home() {
               </div>
             )}
 
-            {/* 图片上传区域 - 铺满整个空间 */}
-            <div className="relative w-full min-h-screen flex items-center justify-center overflow-visible"
+            {/* 图片上传区域 - 铺满整个空间，无边框 */}
+            <div className="fixed inset-0 w-full h-full flex items-center justify-center overflow-hidden"
                  onClick={() => !imagePreview && fileInputRef.current?.click()}>
               {imagePreview ? (
-                <div className="absolute inset-0 w-full h-screen overflow-visible dream-image-container">
+                <div className="absolute inset-0 w-full h-full overflow-visible dream-image-container">
                   <ParticleImage
+                    ref={particleImageRef}
                     src={imagePreview}
                     alt="Preview"
                     className="w-full h-full"
                   />
-                  {/* 光影叠加层 */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#1a1a18]/15 via-transparent to-transparent pointer-events-none z-[3]"></div>
-                  {/* 彩色光晕 */}
-                  <div className="absolute inset-0 bg-gradient-radial from-[#7a9b7a]/6 via-[#d4af37]/4 via-[#6b8db8]/6 to-transparent pointer-events-none z-[3]"></div>
-                  {/* 边缘模糊遮罩 */}
-                  <div className="absolute inset-0 pointer-events-none z-[4]" style={{
-                    maskImage: 'radial-gradient(ellipse 85% 85% at center, black 50%, transparent 100%)',
-                    WebkitMaskImage: 'radial-gradient(ellipse 85% 85% at center, black 50%, transparent 100%)',
-                  }}></div>
+                  {/* 光影叠加层 - 更轻微 */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#1a1a18]/8 via-transparent to-transparent pointer-events-none z-[3]"></div>
+                  {/* 彩色光晕 - 更轻微 */}
+                  <div className="absolute inset-0 bg-gradient-radial from-[#7a9b7a]/4 via-[#d4af37]/3 via-[#6b8db8]/4 to-transparent pointer-events-none z-[3]"></div>
                 </div>
               ) : (
                 <div className="py-40 text-center cursor-pointer group relative z-10">
@@ -312,27 +333,69 @@ export default function Home() {
             {/* 语音输入和控制区域 - 浮动在图片上方，无边框 */}
             <div className={`fixed bottom-8 left-1/2 transform -translate-x-1/2 z-30 w-full max-w-4xl px-8 transition-all duration-500`}>
               <div className="flex flex-col items-center space-y-6">
-                {/* 语音输入按钮 */}
+                {/* 语音输入按钮 - 梦幻圆形设计 */}
                 <button
                   onClick={isRecording ? stopRecording : startRecording}
                   disabled={isProcessing}
-                  className={`px-12 py-5 rounded-sm text-white font-normal tracking-wide transition-all duration-500 btn-elegant relative overflow-hidden backdrop-blur-md bg-black/30 ${
+                  className={`w-28 h-28 rounded-full text-white font-normal tracking-wide transition-all duration-700 relative overflow-visible animate-dreamy-float animate-dreamy-glow ${
                     isRecording
-                      ? 'bg-gradient-to-r from-[#c96b6b]/90 to-[#b85a5a]/90 hover:from-[#b85a5a] hover:to-[#a85a5a] animate-gentle-pulse scale-[1.02] shadow-[0_4px_20px_rgba(201,107,107,0.5)] hover:shadow-[0_6px_30px_rgba(201,107,107,0.7)]'
-                      : 'bg-gradient-to-r from-[#7a9b7a]/80 via-[#d4af37]/80 to-[#6b8db8]/80 hover:from-[#8aab8a] hover:via-[#e5d4a0] hover:to-[#7b9dc8] hover:scale-[1.02] shadow-[0_4px_20px_rgba(122,155,122,0.4)] hover:shadow-[0_6px_30px_rgba(212,175,55,0.6)] bloom-colorful'
+                      ? 'bg-gradient-to-br from-[#c96b6b]/90 via-[#d85a5a]/90 to-[#b85a5a]/90'
+                      : 'bg-gradient-to-br from-[#7a9b7a]/70 via-[#d4af37]/70 to-[#6b8db8]/70'
                   }`}
+                  style={{
+                    filter: 'drop-shadow(0 0 30px rgba(212, 175, 55, 0.6))',
+                  }}
                 >
-                  {isRecording ? (
-                    <span className="flex items-center text-base relative z-10">
-                      <span className="w-2.5 h-2.5 bg-white rounded-full mr-3 animate-pulse"></span>
-                      正在录音...
-                    </span>
-                  ) : (
-                    <span className="text-base relative z-10 flex items-center">
-                      <span className="mr-2">🎤</span>
-                      开始讲述
-                    </span>
-                  )}
+                  {/* 外圈光晕动画 - 多层 */}
+                  <div className={`absolute inset-0 rounded-full animate-ping-slow ${
+                    isRecording 
+                      ? 'bg-[#c96b6b]/15' 
+                      : 'bg-gradient-to-br from-[#7a9b7a]/15 via-[#d4af37]/15 to-[#6b8db8]/15'
+                  }`} style={{ 
+                    transform: 'scale(1.4)',
+                  }}></div>
+                  
+                  <div className={`absolute inset-0 rounded-full animate-ping-slow ${
+                    isRecording 
+                      ? 'bg-[#c96b6b]/10' 
+                      : 'bg-gradient-to-br from-[#7a9b7a]/10 via-[#d4af37]/10 to-[#6b8db8]/10'
+                  }`} style={{ 
+                    animationDelay: '0.5s',
+                    transform: 'scale(1.6)',
+                  }}></div>
+                  
+                  {/* 旋转光晕 */}
+                  <div className={`absolute inset-0 rounded-full animate-dreamy-rotate ${
+                    isRecording 
+                      ? 'bg-[#c96b6b]/5' 
+                      : 'bg-gradient-to-br from-[#7a9b7a]/5 via-[#d4af37]/5 to-[#6b8db8]/5'
+                  }`} style={{ 
+                    background: isRecording 
+                      ? 'conic-gradient(from 0deg, rgba(201,107,107,0.1), rgba(216,90,90,0.05), rgba(184,90,90,0.1))'
+                      : 'conic-gradient(from 0deg, rgba(122,155,122,0.1), rgba(212,175,55,0.05), rgba(107,141,184,0.1))',
+                    transform: 'scale(1.8)',
+                  }}></div>
+                  
+                  {/* 内圈光晕 */}
+                  <div className={`absolute inset-3 rounded-full backdrop-blur-sm ${
+                    isRecording 
+                      ? 'bg-[#c96b6b]/40' 
+                      : 'bg-gradient-to-br from-[#7a9b7a]/40 via-[#d4af37]/40 to-[#6b8db8]/40'
+                  } blur-md`}></div>
+                  
+                  {/* 按钮内容 */}
+                  <div className="relative z-10 flex items-center justify-center h-full">
+                    {isRecording ? (
+                      <div className="flex flex-col items-center justify-center">
+                        <span className="w-4 h-4 bg-white rounded-full mb-2 animate-pulse shadow-[0_0_10px_rgba(255,255,255,0.8)]"></span>
+                        <span className="text-xs font-light">录音中</span>
+                      </div>
+                    ) : (
+                      <span className="text-3xl filter drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]">
+                        🎤
+                      </span>
+                    )}
+                  </div>
                 </button>
                 
                 {/* 转录文本显示 */}

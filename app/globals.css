@@ -605,40 +605,17 @@ html {
     inset 0 0 20px rgba(212, 175, 55, 0.05);
 }
 
-/* 图片容器特殊效果 */
+/* 图片容器特殊效果 - 无边框，完全铺满 */
 .dream-image-container {
   position: relative;
   overflow: visible; /* 允许粒子溢出，没有边界感 */
+  border: none !important; /* 强制移除所有边框 */
+  box-shadow: none !important; /* 移除阴影 */
 }
 
-.dream-image-container::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: 
-    linear-gradient(135deg, rgba(212, 175, 55, 0.1) 0%, transparent 50%),
-    linear-gradient(225deg, rgba(201, 169, 97, 0.08) 0%, transparent 50%);
-  z-index: 1;
-  pointer-events: none;
-  mix-blend-mode: overlay;
-}
-
+.dream-image-container::before,
 .dream-image-container::after {
-  content: '';
-  position: absolute;
-  inset: -2px;
-  background: linear-gradient(
-    45deg,
-    rgba(212, 175, 55, 0.3),
-    transparent,
-    rgba(201, 169, 97, 0.2),
-    transparent
-  );
-  background-size: 200% 200%;
-  animation: shimmer 3s ease-in-out infinite;
-  z-index: 2;
-  pointer-events: none;
-  opacity: 0.3;
+  display: none; /* 移除所有装饰效果 */
 }
 
 @keyframes shimmer {
@@ -648,6 +625,59 @@ html {
   50% {
     background-position: 100% 100%;
   }
+}
+
+/* 梦幻按钮动画 - 确保浏览器兼容性 */
+@keyframes dreamyFloat {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-10px) scale(1.05);
+  }
+}
+
+@keyframes dreamyGlow {
+  0%, 100% {
+    box-shadow: 
+      0 0 20px rgba(212, 175, 55, 0.4),
+      0 0 40px rgba(122, 155, 122, 0.3),
+      0 0 60px rgba(107, 141, 184, 0.2),
+      inset 0 0 20px rgba(255, 255, 255, 0.1);
+  }
+  50% {
+    box-shadow: 
+      0 0 30px rgba(212, 175, 55, 0.6),
+      0 0 60px rgba(122, 155, 122, 0.5),
+      0 0 90px rgba(107, 141, 184, 0.4),
+      inset 0 0 30px rgba(255, 255, 255, 0.15);
+  }
+}
+
+@keyframes dreamyRotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* 确保动画类可用 */
+.animate-dreamy-float {
+  animation: dreamyFloat 4s ease-in-out infinite;
+}
+
+.animate-dreamy-glow {
+  animation: dreamyGlow 3s ease-in-out infinite;
+}
+
+.animate-dreamy-rotate {
+  animation: dreamyRotate 8s linear infinite;
+}
+
+.animate-ping-slow {
+  animation: ping 3s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 
 /* Garden页面特定样式 */
