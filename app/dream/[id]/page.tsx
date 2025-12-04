@@ -42,7 +42,7 @@ export default function DreamDetail() {
     return (
       <div className="min-h-screen flex items-center justify-center relative bg-[#1a1a18]">
         <ParticleBackground />
-        <p className="text-[#d4af37] text-lg font-light tracking-wide relative z-10">加载中...</p>
+        <p className="text-[#d4af37] text-lg font-light tracking-wide relative z-10">Loading...</p>
       </div>
     )
   }
@@ -52,12 +52,12 @@ export default function DreamDetail() {
       <div className="min-h-screen flex items-center justify-center relative bg-[#1a1a18]">
         <ParticleBackground />
         <div className="text-center relative z-10">
-          <p className="text-[#d4af37] text-lg mb-6 font-light tracking-wide">未找到该梦境</p>
+          <p className="text-[#d4af37] text-lg mb-6 font-light tracking-wide">Dream not found</p>
           <button
             onClick={() => router.push('/')}
             className="px-8 py-3 bg-[#d4af37] text-[#1a1a18] rounded-sm hover:bg-[#e5d4a0] transition-all duration-500 font-normal tracking-wide shadow-[0_4px_15px_rgba(212,175,55,0.4)] hover:shadow-[0_6px_25px_rgba(212,175,55,0.6)] btn-elegant relative overflow-hidden golden-glow"
           >
-            <span className="relative z-10">返回首页</span>
+            <span className="relative z-10">Back to Home</span>
           </button>
         </div>
       </div>
@@ -83,7 +83,7 @@ export default function DreamDetail() {
             <svg className="w-5 h-5 mr-2 group-hover:-translate-x-1 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
-            返回
+            Back
           </button>
         </div>
       </nav>
@@ -111,7 +111,7 @@ export default function DreamDetail() {
               <div className="border-t border-b border-[#3a3a37] py-5 mb-10 relative">
                 <div className="absolute left-0 top-0 w-1 h-full bg-gradient-to-b from-[#7a9b7a]/40 via-[#d4af37]/30 to-[#6b8db8]/20"></div>
                 <p className="text-[#9a9893] text-sm font-light tracking-wide pl-6">
-                  {new Date(dream.createdAt).toLocaleDateString('zh-CN', {
+                  {new Date(dream.createdAt).toLocaleDateString('en-US', {
                     year: 'numeric',
                     month: 'long',
                     day: 'numeric',

@@ -83,7 +83,8 @@ const config: Config = {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
       },
       fontFamily: {
-        serif: ['Georgia', 'Palatino', 'Times New Roman', 'serif'],
+        serif: ['var(--font-cormorant)', 'Cormorant Garamond', 'Georgia', 'Palatino', 'Times New Roman', 'serif'],
+        cormorant: ['var(--font-cormorant)', 'Cormorant Garamond', 'serif'],
       },
     },
   },

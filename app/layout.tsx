@@ -1,9 +1,17 @@
 import type { Metadata } from 'next'
+import { Cormorant_Garamond } from 'next/font/google'
 import './globals.css'
 
+const cormorantGaramond = Cormorant_Garamond({
+  weight: ['300', '400', '500', '600', '700'],
+  subsets: ['latin'],
+  variable: '--font-cormorant',
+  display: 'swap',
+})
+
 export const metadata: Metadata = {
-  title: '梦境花园 - Dream Journal',
-  description: '记录你的梦境，让AI为你整理和保存',
+  title: 'Dream Garden - Dream Journal',
+  description: 'Record your dreams, let AI organize and save them',
 }
 
 export default function RootLayout({
@@ -12,7 +20,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="zh-CN">
+    <html lang="en" className={cormorantGaramond.variable}>
       <body>{children}</body>
     </html>
   )

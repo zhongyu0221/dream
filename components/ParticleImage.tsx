@@ -388,7 +388,7 @@ const ParticleImage = forwardRef<ParticleImageHandle, ParticleImageProps>(
       <div ref={containerRef} className={`relative w-full h-full ${className}`}>
         {!isLoaded && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-[#d4af37] text-sm">加载中...</div>
+            <div className="text-[#d4af37] text-sm">Loading...</div>
           </div>
         )}
         <canvas
