@@ -1,22 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { processDream } from '@/lib/openai'
+import { generateDreamTitle } from '@/lib/openai'
 
 export async function POST(request: NextRequest) {
-  let rawText = ''
   try {
     const body = await request.json()
-    rawText = body.rawText || ''
+    const summary = body.summary || ''
 
-    if (!rawText) {
-      return NextResponse.json({ error: 'No text provided' }, { status: 400 })
+    if (!summary) {
+      return NextResponse.json({ error: 'No summary provided' }, { status: 400 })
     }
 
-    const result = await processDream(rawText)
-    return NextResponse.json(result)
+    const title = await generateDreamTitle(summary)
+    return NextResponse.json({ title })
   } catch (error) {
-    console.error('Error processing dream:', error)
+    console.error('Error generating dream title:', error)
     return NextResponse.json(
-      { error: 'Failed to process dream', title: '我的梦境', content: rawText || '梦境记录' },
+      { error: 'Failed to generate dream title', title: 'My Dream' },
       { status: 500 }
     )
   }

@@ -365,7 +365,7 @@ export default function Home() {
       const processResponse = await fetch('/api/process-dream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rawText: summary }),
+        body: JSON.stringify({ summary: summary }),
       })
       
       if (!processResponse.ok) {

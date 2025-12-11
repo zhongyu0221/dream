@@ -25,41 +25,36 @@ function convertMessagesToGeminiFormat(
   return prompt
 }
 
-export async function processDream(rawText: string): Promise<{ title: string; content: string }> {
+// Generate dream title only
+export async function generateDreamTitle(summary: string): Promise<string> {
   try {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
     
-    const systemPrompt = 'You are a professional dream analyst and recorder. Please organize the user\'s dream description into beautiful prose, extract a concise title (no more than 10 words), and structure it as a dream record. Maintain the original meaning, but make the text more fluid and poetic.'
+    const systemPrompt = 'You are a dream title generator. Based on the dream summary provided, generate a concise and meaningful title (no more than 10 words). The title should capture the essence of the dream. Only return the title, nothing else.'
     
-    const prompt = `${systemPrompt}\n\nUser's dream: ${rawText}`
+    const prompt = `${systemPrompt}\n\nDream summary: ${summary}\n\nTitle:`
     
     const result = await model.generateContent(prompt)
     const response = await result.response
-    const text = response.text() || ''
+    let title = response.text()?.trim() || 'My Dream'
     
-    // 尝试提取标题和内容
-    const lines = text.split('\n').filter(line => line.trim())
-    let title = lines[0]?.replace(/^#+\s*/, '').trim() || 'My Dream'
-    let content = text
-
-    // 如果第一行看起来像标题，分离它
-    if (title.length < 30 && lines.length > 1) {
-      content = lines.slice(1).join('\n')
+    // Clean up the title - remove any quotes, extra formatting
+    title = title.replace(/^["']|["']$/g, '').trim()
+    
+    // If title is too long, truncate
+    if (title.length > 50) {
+      title = title.substring(0, 47) + '...'
+    }
+    
+    // If empty or too short, use default
+    if (!title || title.length < 2) {
+      title = 'My Dream'
     }
 
-    // 如果标题太长，截取
-    if (title.length > 20) {
-      title = title.substring(0, 20) + '...'
-    }
-
-    return { title, content }
+    return title
   } catch (error) {
-    console.error('Gemini API error:', error)
-    // 如果API失败，返回原始内容
-    return {
-      title: 'My Dream',
-      content: rawText,
-    }
+    console.error('Gemini API error generating title:', error)
+    return 'My Dream'
   }
 }
 
@@ -107,9 +102,9 @@ export async function generateDreamSummary(
 
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
     
-    const systemPrompt = 'You are a dream recorder. Read ALL of the user\'s input and create a clear, concise summary of their dream. Only summarize what the user said - do not add any extra information, interpretations, or embellishments. Keep it simple and direct.'
+    const systemPrompt = 'You are a dream recorder. Read ALL of the user\'s input and create a clear, concise summary of their dream. Write the summary in first person, starting sentences with "I..." as if the user is summarizing their own dream. Only summarize what the user said - do not add any extra information, interpretations, or embellishments. Keep it simple and direct.'
     
-    const prompt = `${systemPrompt}\n\nUser's dream input:\n\n${allUserInput}\n\nSummary:`
+    const prompt = `${systemPrompt}\n\nUser's dream input:\n\n${allUserInput}\n\nSummary (write in first person, start with "I..."):`
 
     console.log('Calling Gemini API to generate summary...')
     const result = await model.generateContent(prompt)
