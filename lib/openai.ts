@@ -30,9 +30,9 @@ export async function generateDreamTitle(summary: string): Promise<string> {
   try {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
     
-    const systemPrompt = 'You are a dream title generator. Based on the dream summary provided, generate a concise and meaningful title (no more than 10 words). The title should capture the essence of the dream. Only return the title, nothing else.'
+    const systemPrompt = 'You are a dream title generator. Based on the dream summary provided, generate a concise and meaningful title in English (no more than 10 words). The title should capture the essence of the dream. Only return the title, nothing else.'
     
-    const prompt = `${systemPrompt}\n\nDream summary: ${summary}\n\nTitle:`
+    const prompt = `${systemPrompt}\n\nDream summary: ${summary}\n\nTitle (in English):`
     
     const result = await model.generateContent(prompt)
     const response = await result.response
@@ -65,7 +65,7 @@ export async function getAIResponse(
   try {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
     
-    const systemPrompt = 'You are a warm and empathetic dream listener. When users share their dreams, respond with a gentle and encouraging tone. You can:\n1. Express understanding and empathy\n2. Ask gentle questions to help users describe their dreams more deeply\n3. Provide positive feedback\n4. Reply with concise, warm language (no more than 50 words)\n\nRemember: Your goal is to help users better record and express their dreams, not to analyze or interpret them.'
+    const systemPrompt = 'You are a warm and empathetic dream listener. When users share their dreams, respond with a gentle and encouraging tone. You can:\n1. Express understanding and empathy\n2. Ask gentle questions to help users describe their dreams more deeply\n3. Provide positive feedback\n4. Reply with concise, warm language (no more than 50 words)\n\nIMPORTANT: Always respond in English only, regardless of the language the user uses. Your goal is to help users better record and express their dreams, not to analyze or interpret them.'
     
     let prompt = convertMessagesToGeminiFormat(systemPrompt, conversationHistory)
     prompt += 'Assistant:'
@@ -102,9 +102,9 @@ export async function generateDreamSummary(
 
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
     
-    const systemPrompt = 'You are a dream recorder. Read ALL of the user\'s input and create a clear, concise summary of their dream. Write the summary in first person, starting sentences with "I..." as if the user is summarizing their own dream. Only summarize what the user said - do not add any extra information, interpretations, or embellishments. Keep it simple and direct.'
+    const systemPrompt = 'You are a dream recorder. Read ALL of the user\'s input and create a clear, concise summary of their dream. Write the summary in first person, starting sentences with "I..." as if the user is summarizing their own dream. Only summarize what the user said - do not add any extra information, interpretations, or embellishments. Keep it simple and direct.\n\nIMPORTANT: Always write the summary in English only, regardless of the language the user used in their input. If the user input is in Chinese or any other language, translate and summarize it in English.'
     
-    const prompt = `${systemPrompt}\n\nUser's dream input:\n\n${allUserInput}\n\nSummary (write in first person, start with "I..."):`
+    const prompt = `${systemPrompt}\n\nUser's dream input:\n\n${allUserInput}\n\nSummary (write in English, first person, start with "I..."):`
 
     console.log('Calling Gemini API to generate summary...')
     const result = await model.generateContent(prompt)

@@ -21,7 +21,8 @@ export default function Home() {
   const [image, setImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string>('')
   const [isRecording, setIsRecording] = useState(false)
-  const [transcript, setTranscript] = useState('')
+  const [transcript, setTranscript] = useState('') // Final transcript (confirmed)
+  const [interimTranscript, setInterimTranscript] = useState('') // Temporary transcript (real-time)
   const [isProcessing, setIsProcessing] = useState(false)
   const [dreams, setDreams] = useState<Dream[]>([])
   const [showList, setShowList] = useState(false)
@@ -118,16 +119,20 @@ export default function Home() {
 
       const recognition = new SpeechRecognition()
       
-      recognition.lang = 'en-US'
+      // Support both Chinese and English recognition
+      // Using zh-CN as primary language - modern Chinese speech recognition
+      // can handle both Chinese and English words in mixed speech
+      // This allows users to speak in Chinese, English, or mix both languages
+      recognition.lang = 'zh-CN'
       recognition.continuous = true
       recognition.interimResults = true
+      recognition.maxAlternatives = 1
 
       recognition.onstart = () => {
         setIsRecording(true)
         setRecordingTime(0)
-        if (!transcript) {
-          setTranscript('')
-        }
+        setTranscript('')
+        setInterimTranscript('')
         // Start timer
         const timer = setInterval(() => {
           setRecordingTime((prev) => prev + 1)
@@ -136,34 +141,46 @@ export default function Home() {
       }
 
       recognition.onresult = (event: any) => {
-        let interimTranscript = ''
-        let finalTranscript = ''
+        let interimText = ''
+        let finalText = ''
+        let hasNewFinal = false
 
+        // Process all results from the last processed index
         for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript
-          if (event.results[i].isFinal) {
-            finalTranscript += transcript + ' '
+          const result = event.results[i]
+          const text = result[0].transcript
+          
+          if (result.isFinal) {
+            finalText += text + ' '
+            hasNewFinal = true
           } else {
-            interimTranscript += transcript
+            interimText += text
           }
         }
 
-        // 更新临时转录文本（用于显示）
-        setTranscript((prev) => {
-          const existingFinal = prev.split('\n').filter(line => line.trim()).join('\n')
-          return existingFinal ? `${existingFinal}\n${finalTranscript}${interimTranscript}` : `${finalTranscript}${interimTranscript}`
-        })
+        // Update interim transcript for real-time display
+        setInterimTranscript(interimText)
 
-        // 如果有最终结果，添加到对话历史（不自动获取AI回复）
-        if (finalTranscript.trim()) {
-          const userMessage = finalTranscript.trim()
+        // If there's a final result, add it to transcript and conversation history
+        if (hasNewFinal && finalText.trim()) {
+          const finalMessage = finalText.trim()
+          
+          // Add to final transcript
+          setTranscript((prev) => {
+            return prev ? `${prev}\n${finalMessage}` : finalMessage
+          })
+          
+          // Clear interim since we have final
+          setInterimTranscript('')
+          
+          // Add to conversation history (avoid duplicates)
           setConversationHistory((prev) => {
-            // 检查是否已经添加过这条消息（避免重复）
             const lastUserMessage = prev.filter(msg => msg.role === 'user').pop()
-            if (lastUserMessage?.content === userMessage) {
-              return prev
+            // Only add if it's different from the last message
+            if (lastUserMessage?.content !== finalMessage) {
+              return [...prev, { role: 'user' as const, content: finalMessage }]
             }
-            return [...prev, { role: 'user' as const, content: userMessage }]
+            return prev
           })
         }
       }
@@ -173,31 +190,38 @@ export default function Home() {
         
         // 处理特定错误
         if (event.error === 'no-speech') {
-          // 没有检测到语音，继续录音
+          // 没有检测到语音，继续录音（不清除状态）
           return
         } else if (event.error === 'audio-capture') {
           alert('Unable to access microphone. Please check your permissions.')
         } else if (event.error === 'not-allowed') {
           alert('Microphone permission denied. Please allow access in browser settings.')
+        } else if (event.error === 'aborted') {
+          // 用户手动停止，这是正常的
+          return
         }
         
+        // 对于其他错误，清理状态
         setIsRecording(false)
         if (recordingTimer) {
           clearInterval(recordingTimer)
           setRecordingTimer(null)
         }
         setRecordingTime(0)
+        setInterimTranscript('')
         recognitionRef.current = null
       }
 
       recognition.onend = () => {
-        // 只有在用户没有手动停止时才自动重启（可选）
-        // 这里我们设置为停止状态
+        // 录音结束，清理状态
         setIsRecording(false)
         if (recordingTimer) {
           clearInterval(recordingTimer)
           setRecordingTimer(null)
         }
+        setRecordingTime(0)
+        // Clear interim transcript when recognition ends
+        setInterimTranscript('')
         recognitionRef.current = null
       }
 
@@ -244,7 +268,6 @@ export default function Home() {
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop()
-        recognitionRef.current.abort()
       } catch (error) {
         console.error('Error stopping recognition:', error)
       }
@@ -255,12 +278,16 @@ export default function Home() {
       clearInterval(recordingTimer)
       setRecordingTimer(null)
     }
+    setRecordingTime(0)
+    // Clear interim transcript when stopping
+    setInterimTranscript('')
   }
 
   // Cancel recording and clear transcript
   const cancelRecording = () => {
     stopRecording()
     setTranscript('')
+    setInterimTranscript('')
     setConversationHistory([])
     setRecordingTime(0)
   }
@@ -287,15 +314,15 @@ export default function Home() {
     setIsProcessing(true)
 
     try {
-      // 1. 上传原始图片作为封面
+      // 1. Upload the original image file as the dream cover
       const formData = new FormData()
-      formData.append('file', image)
+      formData.append('file', image) // User's original uploaded image
       const uploadResponse = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
       })
       const result = await uploadResponse.json()
-      const imageUrl = result.imageUrl
+      const imageUrl = result.imageUrl // This is the original image URL saved to public/uploads/
 
       // 2. 提取所有用户输入
       const allUserInput = conversationHistory
@@ -390,9 +417,9 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title,
-          content, // AI生成的温暖总结（这是主要显示的内容）
-          rawContent, // 原始对话内容（备份，不显示）
-          imageUrl, // 上传的原图作为封面
+          content, // AI-generated summary (first person, "I...")
+          rawContent, // Original conversation (backup, not displayed)
+          imageUrl, // Original uploaded image URL - used as cover in dream gallery
         }),
       })
 
@@ -405,6 +432,7 @@ export default function Home() {
         setImage(null)
         setImagePreview('')
         setTranscript('')
+        setInterimTranscript('')
         setConversationHistory([])
         if (fileInputRef.current) {
           fileInputRef.current.value = ''
@@ -682,11 +710,13 @@ export default function Home() {
                           </div>
                         </div>
                       )}
-                      {transcript && !conversationHistory.some(msg => msg.content === transcript.trim()) && (
+                      {/* Show real-time interim transcript while recording */}
+                      {isRecording && interimTranscript && (
                         <div className="flex justify-end">
-                          <div className="max-w-[75%] rounded-lg px-4 py-3 bg-gradient-to-r from-[#7a9b7a]/40 via-[#d4af37]/40 to-[#6b8db8]/40 text-white/70">
+                          <div className="max-w-[75%] rounded-lg px-4 py-3 bg-gradient-to-r from-[#7a9b7a]/30 via-[#d4af37]/30 to-[#6b8db8]/30 text-white/60 border border-[#d4af37]/20">
                             <p className="text-sm leading-relaxed font-light tracking-wide italic">
-                              {transcript.split('\n').pop()}
+                              {interimTranscript}
+                              <span className="inline-block w-1 h-4 bg-[#d4af37] ml-1 animate-pulse"></span>
                             </p>
                           </div>
                         </div>
@@ -719,11 +749,14 @@ export default function Home() {
                     onClick={() => router.push(`/dream/${dream.id}`)}
                     style={{ animationDelay: `${index * 0.1}s` }}
                   >
-                    <div className="relative w-full h-56 overflow-visible dream-image-container">
-                      <ParticleImage
+                    <div className="relative w-full h-56 overflow-hidden dream-image-container">
+                      {/* Display the original uploaded image as cover */}
+                      <Image
                         src={dream.imageUrl}
                         alt={dream.title}
-                        className="w-full h-full"
+                        fill
+                        className="object-cover"
+                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-[#1a1a18]/30 via-transparent to-transparent pointer-events-none z-[3]"></div>
                       <div className="absolute inset-0 bg-gradient-radial from-[#7a9b7a]/8 via-[#d4af37]/6 via-[#6b8db8]/8 to-transparent pointer-events-none z-[3]"></div>
